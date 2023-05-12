@@ -8,6 +8,12 @@ django = "*"
 psycopg2 = "*"
 djangorestframework = "*"
 python-dotenv = "*"
+djangorestframework-simplejwt = {extras = ["crypto"], version = "*"}
+django-cors-headers = "*"
+channels = {extras = ["daphne"], version = "*"}
+shortuuid = "*"
+channels-redis = "*"
+redis = "*"
 
 [dev-packages]
 
