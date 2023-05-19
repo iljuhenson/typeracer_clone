@@ -56,7 +56,7 @@ fetch('/api/signup/', {
 
 ## Authentication
 
-### `POST /api/login`<a id="login"></a>
+### <a id="login"></a>`POST /api/login`
 
 Sends refresh token and access token to the client in exchange for username and password. Access token is mostly used for authenticating when entering a race.<br/>
 _Note: refresh token and access token have their own expiry date on the server so that you can no longer use them. If access token expires you should [refresh it](#login-refresh). If refresh token expires you need to login using auth credentials again._
@@ -76,7 +76,7 @@ _Note: refresh token and access token have their own expiry date on the server s
 * `200` : successfull login.
 * `401` : user with such credentials does not exist or wrong password was given.
 
-### `POST /api/login/refresh`<a id="login-refresh"/>
+### <a id="login-refresh"/>`POST /api/login/refresh`
 
 Sends access token to the client in exchange for the refresh token if refresh token hasn't expired.<br/>
 _Note: access token is not required to be in headers._
@@ -142,7 +142,7 @@ fetch('/api/login/', {
 
 ## Races
 
-### `GET /api/races/available`
+### <a id="available-races" />`GET /api/races/available`
 
 Lists all the races in which user can participate. It doesn't show races which has already started or ended.<br />
 _Note: user doesn't have to be logged in to see this list but to participate in any of them he should login first._
@@ -157,9 +157,9 @@ _Note: user doesn't have to be logged in to see this list but to participate in 
 
 * `200` : success.
 
-### `GET /api/races/race/create`
+### `POST /api/races/race/create`
 
-Creates a new race which will be available to join until the race is started or finished or until it gets deleted, server gets deleted if there are no more players on the server or until server lifetime runs out. [More on the race mechanics...]()<br />
+Creates a new race which will be available to join until the race is started or finished or until it gets deleted, server gets deleted if there are no more players on the server or until server lifetime runs out. [More on how race is organised...](#race-mechanics)<br />
 _Note: user has to be logged in to create a new race._
 
 **Response:**
@@ -170,3 +170,81 @@ _Note: user has to be logged in to create a new race._
 **Status codes:**
 
 * `201` : Race was successfully created.
+
+# <a id="race-mechanics">Race server/game powered by Websocket</a>
+
+## Workflow
+
+1. First users connects to the server using corresponding websocket route with [race_id](#available-races) and [access_token](#login):
+    <pre>/ws/race/<b>race_id</b>/?token=<b>access_token</b></pre>
+
+2. Every time someone connects or disconnects every user including the one who have just connected receives message with a type of `player_list`:
+    ```json
+    {
+      "type": "player_list",
+      "players": [
+        // there can be multiple of player objects
+        {
+          "id": 1,
+          "username": "ExampleUser"
+        }
+      ],
+      "time": "2018-12-10T13:49:51.141Z" // time when the race will start
+    }
+    ```
+3. There are 2 ways to start the race:
+    1. Race start automatically once there are 3 players. When there are 3 players server will send a `player_list` again to indicate when will race start in the `time` field. For the automatic race start it takes **10 seconds** for a race to start. ___When timer is active users can still join.___ Once the timer is up no one can join.
+    2. Force start race(this feature is only available to the creator of the race). For force start race it takes **5 seconds** for a race to start. To do so creator of the race should send the following message to the server:
+        ```json
+        {
+          "type": "race_action",
+          "action": "start_race"
+        }
+        ```
+4. Once the timer is up every player will get message from the server which will contain the quote that everyone will be typing and also indicates that the race has been started. No players can join anymore and the race is not showing in the [list of available races](#available-races). Quote for the race is randomly chosen from the database of quotes. This message will look like this:
+    ```json
+    {
+      "type": "race_start",
+      "quote": "Example quote!", 
+      "author": "Jim Smith",
+      "categories": [
+        // can contain multiple categories
+        // which will be looking something like that
+        "entertaining"
+      ]
+    }
+    ```
+5. To progress in the race client-side application must send every word that is in the quote one by one to the server. This makes it so that every player could see your progress and vise versa you could see every person's progress. Let's look at the following example:
+    ```json
+    {
+      "type": "race_start",
+      "quote": "Self-respect permeates every aspect of your life.",
+      "author": "Joe Clark",
+      "categories": [
+        "life"
+      ]
+    }
+    ```
+    The above json object is the response server gave all the participants of the race. Every time, participant types a word you must send it to the server as the following kind of object:
+    ```json
+    {
+      "type": "race_progress",
+      "word": "Self-respect" // with no leading and trailing whitespaces, otherwise progress won't be caught
+    }
+    ```
+    The server will then check if the word you sent was correct and sent in the right order. If all the conditions are met, every participant will receive the following json response:
+    ```json
+    {
+      "type": "race_progress",
+      "user_id": 1, // That's an ID of a user who sent this word
+      "word": "Self-respect"
+    }
+    ```
+    Next word you'll be sending will look like this:
+    ```json
+    {
+      "type": "race_progress",
+      "word": "permeates"
+    }
+    ```
+    So on and so forth, after sending the last word to the server. Then server will count the time you spent on the race and will record it to the database. When one participant finishes, the race will be automatically marked as finished inside the database, which means the race won't be deleted(database record deletion is only applied for innactive servers).
