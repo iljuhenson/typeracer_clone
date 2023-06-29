@@ -14,6 +14,7 @@ STATUS_CHOICE = (
 def generate_short_uuid():
     return shortuuid.ShortUUID().random(length=10)
 
+# 
 
 class Race(models.Model):
     id = models.CharField(max_length=10, primary_key=True, default=generate_short_uuid, editable=False, unique=True)
@@ -27,6 +28,8 @@ class Race(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
 
 
+# place
+# average_speed
 class RaceStatistics(models.Model):
     time_racing = models.DurationField(blank=True, null=True)
 

@@ -4,6 +4,11 @@
 
 This api allows you to make your own copy of Typeracer game. This game is powered by [Websocket protocol](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) and [JWT authentication](https://jwt.io/).
 
+As for how project client-server interaction should look like here's a quik workflow of the project:
+1. User opens up the website and the first thing he has to do is to sign up and then login.
+2. Next thing after user logs in h can proceed with creating his own race or choose a race from the list of the available races. _Note: race is basically who will type the given phrase first._
+3. Then he can enter the race and have fun completing it ([websocket implementation of race](#race-mechanics)).
+
 # Endpoints
 
 ## Signup
@@ -183,14 +188,23 @@ _Note: user has to be logged in to create a new race._
     {
       "type": "player_list",
       "players": [
-        // there can be multiple of player objects
         {
           "id": 1,
           "username": "ExampleUser"
+        },
+        {
+          "id": 4,
+          "username": "ExampleUser1"
         }
       ],
-      "time": "2018-12-10T13:49:51.141Z" // time when the race will start
+      "time": "2023-05-30T20:32:20.688788"
     }
+    ```
+    _Note: __time__ is a field that indicates when the race will start._
+    ```javascript
+    // This code can easily convert this date
+    // because the date is in ISO format.
+    let js_date = new Date("2023-05-30T20:32:20.688788")
     ```
 3. There are 2 ways to start the race:
     1. Race start automatically once there are 3 players. When there are 3 players server will send a `player_list` again to indicate when will race start in the `time` field. For the automatic race start it takes **10 seconds** for a race to start. ___When timer is active users can still join.___ Once the timer is up no one can join.
@@ -208,9 +222,8 @@ _Note: user has to be logged in to create a new race._
       "quote": "Example quote!", 
       "author": "Jim Smith",
       "categories": [
-        // can contain multiple categories
-        // which will be looking something like that
-        "entertaining"
+        "entertaining",
+        "life"
       ]
     }
     ```
@@ -229,17 +242,21 @@ _Note: user has to be logged in to create a new race._
     ```json
     {
       "type": "race_progress",
-      "word": "Self-respect" // with no leading and trailing whitespaces, otherwise progress won't be caught
+      "word": "Self-respect"
     }
     ```
+    _Note: __word__ field must have no leading and trailing whitespaces, otherwise progress won't be recorded._
+
     The server will then check if the word you sent was correct and sent in the right order. If all the conditions are met, every participant will receive the following json response:
     ```json
     {
       "type": "race_progress",
-      "user_id": 1, // That's an ID of a user who sent this word
+      "user_id": 1,
       "word": "Self-respect"
     }
     ```
+    _Note: __user_id__ is an ID of the user who initially typed that word._
+
     Next word you'll be sending will look like this:
     ```json
     {

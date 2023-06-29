@@ -16,8 +16,8 @@ def race_list(request):
     List all available races
     """
     if request.method == 'GET':
-        races = Race.objects.filter(status='w')
-        serializer = RaceSerializer(races, many=True)
+        races = models.Race.objects.filter(status='w')
+        serializer = serializers.RaceSerializer(races, many=True)
         return Response(serializer.data)
 
 

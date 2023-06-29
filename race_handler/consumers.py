@@ -29,6 +29,11 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         self.server_lifetime_time_key = None
         self.starting_time_key = None
 
+# close_if_already_a_participant(self)
+# get_corresponding_race_model_or_close(self)
+# add_current_user_to_participants_list(self)
+# start_race_at(datetime)
+#
     def connect(self):
         if not self.scope['user'].is_authenticated:
             self.close()
@@ -68,22 +73,35 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         self.is_race_started_key = f"{self.race_name}_status"
 
         is_race_started = cache.get(self.is_race_started_key)
-        starting_time = cache.get(self.starting_time_key)
+        start_date = cache.get(self.starting_time_key)
         async_to_sync(self.channel_layer.group_add)(self.race_name, self.channel_name)
         
         self.accept()
         
         if len(players) == 3 and not is_race_started:
             starting_time = 10.0
-            cache.set(self.starting_time_key, starting_time, settings.REDIS_CACHE_TIMEOUT)
-            starting = threading.Thread(target=self.start_race)
+            starting = threading.Thread(target=self.start_race, kwargs={'time_before_start' : starting_time})
             starting.start()
+            return
         
-        async_to_sync(self.channel_layer.group_send)(self.race_name, {
-            'type': 'player_list',
-            'players': players,
-            'time' : starting_time
-        })
+        if start_date:
+            async_to_sync(self.channel_layer.group_send)(self.race_name, {
+                'type': 'player_list',
+                'players': players,
+                'time' : start_date.isoformat(),
+            })
+        else:
+            async_to_sync(self.channel_layer.group_send)(self.race_name, {
+                'type': 'player_list',
+                'players': players,
+            })
+
+# close_if_already_a_participant(self) # questionable?
+# delete_current_user_from_participants_list(self)
+# check_if_zero_participants(self)
+# check_if_finished(self)
+# delete_race_from_db(self)
+# delete_unfinished_users(self)
 
     def disconnect(self, close_code):
         if not self.scope['user'] or not self.scope['user'].is_authenticated:
@@ -106,13 +124,20 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
             self.clean_race_cache()
             return
 
-        starting_time = cache.get(self.starting_time_key)
+        start_date = cache.get(self.starting_time_key)
+        if start_date:
+            async_to_sync(self.channel_layer.group_send)(self.race_name, {
+                'type': 'player_list',
+                'players': players,
+                'time' : start_date.isoformat(),
+            })
+        else:
+            async_to_sync(self.channel_layer.group_send)(self.race_name, {
+                'type': 'player_list',
+                'players': players,
+            })
 
-        async_to_sync(self.channel_layer.group_send)(self.race_name, {
-            'type': 'player_list',
-            'players': players,
-            'time' : starting_time,
-        })
+
 
     def receive_json(self, content, **kwargs):
 
@@ -136,8 +161,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
                 if self.scope['user'].id == self.race_details.creator.id:
                     starting_time = 5.0
-                    cache.set(self.starting_time_key, starting_time, settings.REDIS_CACHE_TIMEOUT)
-                    starting = threading.Thread(target=self.start_race)
+                    starting = threading.Thread(target=self.start_race, kwargs={'time_before_start' : starting_time})
                     
                     starting.start()
                     return
@@ -192,7 +216,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
                 return
 
 
-    def start_race(self):
+    def start_race(self, time_before_start):
         is_race_started = cache.get(self.is_race_started_key)
 
         if is_race_started:
@@ -200,18 +224,18 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
         cache.set(self.is_race_started_key, True, settings.REDIS_CACHE_TIMEOUT)
         players = cache.get(self.race_name)
-        starting_time = cache.get(self.starting_time_key)
+
+        start_date = datetime.datetime.now() + datetime.timedelta(seconds = time_before_start)
+        cache.set(self.starting_time_key, start_date, settings.REDIS_CACHE_TIMEOUT)
+
 
         async_to_sync(self.channel_layer.group_send)(self.race_name, {
             'type': 'player_list',
             'players': players,
-            'time' : starting_time,
+            'time' : start_date.isoformat(),
         })
 
-        
-        for second in range(int(starting_time)):
-            time.sleep(1)
-            cache.set(self.starting_time_key, starting_time - second - 1, settings.REDIS_CACHE_TIMEOUT)
+        time.sleep(int(time_before_start))
 
         quotes_to_choose = Quotes.objects.all()
 

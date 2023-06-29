@@ -15,7 +15,7 @@ urlpatterns = [
     # Third party
     path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    # path('api/login/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
     # Local
     path('api/', include('quotes_interface.urls')),

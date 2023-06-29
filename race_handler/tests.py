@@ -148,12 +148,15 @@ class RaceHandlerTestCase(APITransactionTestCase):
         self.assertEqual(response['type'], "player_list")
         self.assertEqual(len(response['players']), 1)
 
+        current_time = datetime.datetime.now()
         await communicator.send_json_to({'type': 'race_action', 'action' : 'start_race'})
 
         race_start_timer_response = await communicator.receive_json_from()
         
         self.assertEqual(race_start_timer_response['type'], 'player_list')
-        self.assertEqual(race_start_timer_response['time'], 5)
+
+        race_starting_time = datetime.datetime.fromisoformat(race_start_timer_response['time'])
+        self.assertEqual((race_starting_time - current_time).seconds, 5)
         
         race_start_response = await communicator.receive_json_from(timeout=7)
         
@@ -200,6 +203,8 @@ class RaceHandlerTestCase(APITransactionTestCase):
         communicator = WebsocketCommunicator(self.url_patterns, f"/ws/race/{race.id}/?token={self.access_token}")
         connected, _ = await communicator.connect()
         
+        datetime_before_last_player_joins = None
+
         user_list = []
         
         for user in ADDITIONAL_USERS:
@@ -216,6 +221,8 @@ class RaceHandlerTestCase(APITransactionTestCase):
             access_token = refresh_token.access_token
 
             communicator_temp = WebsocketCommunicator(self.url_patterns, f"/ws/race/{race.id}/?token={access_token}")
+
+            datetime_before_last_player_joins = datetime.datetime.now()
             connected_temp, _ = await communicator_temp.connect()
 
             self.assertTrue(connected_temp)
@@ -235,8 +242,11 @@ class RaceHandlerTestCase(APITransactionTestCase):
         self.assertEqual(len(player_list_response['players']), 4)
 
         player_list_response2 = await get_last_message(user_list[2]['communicator'])
+        
+        
+        race_starting_datetime = datetime.datetime.fromisoformat(player_list_response2['time'])
+        self.assertEqual((race_starting_datetime - datetime_before_last_player_joins).seconds, 8)
 
-        self.assertTrue(player_list_response2['time'] != 10)
 
         race_start_response = await user_list[0]['communicator'].receive_json_from(timeout=11)
 
