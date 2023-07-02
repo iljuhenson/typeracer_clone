@@ -3,9 +3,12 @@ import random
 import time
 import datetime
 
+
 from django.db.models import Q
 from django.core.cache import cache
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
@@ -17,271 +20,279 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(args, kwargs)
-        self.race_id = None
-        self.race_details = None
-        self.race_name = None
+        self.race_model = None
         self.word_index = 0
-        self.is_race_started_key = None
-        self.race_text_key = None
-        self.race_text = None
-        self.race_start_time_key = None
-        self.race_end_time = None
-        self.server_lifetime_time_key = None
-        self.starting_time_key = None
+        self.requires_cleanup = True
 
-# close_if_already_a_participant(self)
-# get_corresponding_race_model_or_close(self)
-# add_current_user_to_participants_list(self)
-# start_race_at(datetime)
-#
+
     def connect(self):
-        if not self.scope['user'].is_authenticated:
-            self.close()
-            return
-
+        
         self.race_id = self.scope['url_route']['kwargs']['race_id']
+
+        if not self.check_if_authenticated():
+            self.requires_cleanup = False
+            self.close()
+            return
         
-        try: 
-            self.race_details = models.Race.objects.get(id = self.race_id, status="w")
-        except:
+        self.race_model = self.get_corresponding_race_model()
+
+        if not self.race_model:
+            self.requires_cleanup = False
             self.close()
             return
 
-        self.server_lifetime_time_key = f"{self.race_name}_server_time_left"
-        if not cache.has_key(self.server_lifetime_time_key):
-            threading.Thread(target=self.start_server_lifetime_timer)
+        
 
-        self.race_name = f"race_{self.race_id}"
-
-        players = cache.has_key(self.race_name)
-
-        if not players:
-            players = []
-        else:
-            players = cache.get(self.race_name)
-
-        if {'id' : self.scope['user'].id, 'username' : self.scope['user'].username} in players:
-            self.scope['user'] = None
+        if self.check_if_already_participates():
+            self.requires_cleanup = False
             self.close()
             return
 
-        players.append({'id' : self.scope['user'].id, 'username' : self.scope['user'].username})
-        cache.set(self.race_name, players, settings.REDIS_CACHE_TIMEOUT)
+        self.add_current_user_to_participants_list()
 
-        self.race_text_key = f"{self.race_name}_text"
-        self.starting_time_key = f"{self.race_name}_starting_time"
-        self.is_race_started_key = f"{self.race_name}_status"
+        race_start_date = self.get_race_start_date_or_none()
 
-        is_race_started = cache.get(self.is_race_started_key)
-        start_date = cache.get(self.starting_time_key)
-        async_to_sync(self.channel_layer.group_add)(self.race_name, self.channel_name)
+        if len(self.get_participants().all()) >= 3 and not self.is_race_started():
+            race_start_date = self.calculate_date_after(10.0)
+            self.set_race_start_date(race_start_date)
+            self.start_race_at(race_start_date)
         
-        self.accept()
-        
-        if len(players) == 3 and not is_race_started:
-            starting_time = 10.0
-            starting = threading.Thread(target=self.start_race, kwargs={'time_before_start' : starting_time})
-            starting.start()
-            return
-        
-        if start_date:
-            async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                'type': 'player_list',
-                'players': players,
-                'time' : start_date.isoformat(),
-            })
-        else:
-            async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                'type': 'player_list',
-                'players': players,
-            })
+        self.share_race_organisational_info(race_start_date or None)
 
-# close_if_already_a_participant(self) # questionable?
-# delete_current_user_from_participants_list(self)
-# check_if_zero_participants(self)
-# check_if_finished(self)
-# delete_race_from_db(self)
-# delete_unfinished_users(self)
 
     def disconnect(self, close_code):
-        if not self.scope['user'] or not self.scope['user'].is_authenticated:
+        if not self.requires_cleanup:
             return
 
-        players = cache.get(self.race_name)
-        players.remove({'id' : self.scope['user'].id, 'username' : self.scope['user'].username})
-        cache.set(self.race_name, players, settings.REDIS_CACHE_TIMEOUT)
+        self.remove_current_user_from_participants_list()
 
-
-        is_race_started = cache.get(self.is_race_started_key)
-        async_to_sync(self.channel_layer.group_discard)(self.race_name, self.channel_name)
-        
-        if len(players) == 0 and models.Race.objects.get(id = self.race_id).status != 'f':
-            models.Race.objects.get(id = self.race_id).delete()
-            self.clean_race_cache()
+        if len(self.get_participants().all()) == 0 and not self.is_race_finished():
+            self.delete_race_from_db()
             return
 
-        if len(players) == 0:
-            self.clean_race_cache()
-            return
+        race_start_date = self.get_race_start_date_or_none()
 
-        start_date = cache.get(self.starting_time_key)
-        if start_date:
-            async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                'type': 'player_list',
-                'players': players,
-                'time' : start_date.isoformat(),
-            })
-        else:
-            async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                'type': 'player_list',
-                'players': players,
-            })
-
-
-
+        self.share_race_organisational_info(race_start_date)
+    
+    
     def receive_json(self, content, **kwargs):
-
-        is_race_started = cache.get(self.is_race_started_key)
-        try:
-            content_type = content['type'] 
-        except KeyError:
-            self.send_json({
-                    'type' : 'error',
-                    'text' : 'Wrong message format',
-                })
+        
+        content_type = self.get_content_type_or_none(content)
+        
+        if content_type is None:
+            self.send_error_wrong_message_format()
             return
 
         if content_type == 'race_action':
             if content['action'] == 'start_race':
                 
-                is_race_started = cache.get(self.is_race_started_key)
-
-                if is_race_started == True:
-                    return
-
-                if self.scope['user'].id == self.race_details.creator.id:
-                    starting_time = 5.0
-                    starting = threading.Thread(target=self.start_race, kwargs={'time_before_start' : starting_time})
+                if not self.is_race_started():
+                    race_start_date = self.calculate_date_after(5.0)
+                    self.set_race_start_date(race_start_date)
+                    self.start_race_at(race_start_date)
+                
+                    self.share_race_organisational_info(race_start_date)
                     
-                    starting.start()
                     return
 
-            self.send_json({
-                    'type' : 'error',
-                    'text' : 'Wrong message format',
-                })
-            return
-
-        if is_race_started and content_type == 'race_progress':
-
-            try:
-                players_word = content['word']
-            except KeyError:
-                self.send_json({
-                    'type' : 'error',
-                    'text' : 'Wrong message format',
-                })
+            else:
+                self.send_error_wrong_message_format()
                 return
+
+        if self.is_race_available_to_join():
+            return
+        
+        if content_type == 'race_progress':
+
+            quote = self.get_quote_of_the_game()
             
-            if not self.race_text:
-                self.race_text = cache.get(self.race_text_key).split()
+            if not self.is_typed_word_valid(content, quote):
+                self.send_error_wrong_message_format()
+                return 
 
-            if not self.race_text[self.word_index] == players_word:
-                self.send_json({
-                    'type' : 'race_error',
-                    'text' : 'Wrong word was sent. Race cannot be continued for that user until the correct word will be sent',
-                })
-                return
-            elif self.word_index + 1 != len(self.race_text):
-                self.word_index = self.word_index + 1
-                async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                    'type': 'race_progress',
-                    'user_id': self.scope['user'].id,
-                    'word': players_word,
-                })
-                return
-            elif self.word_index + 1 == len(self.race_text):
-                self.word_index = self.word_index + 1
-                self.race_end_time = time.perf_counter()
-                race = models.Race.objects.get(id = self.race_id)
-                race.participants.add(self.scope['user'])
-                race.status = 'f'
-                race.save()
-                race.statistics.create(time_racing = datetime.timedelta(seconds=self.race_end_time - cache.get(self.race_start_time_key)), finished = True, player = self.scope['user'])
-                async_to_sync(self.channel_layer.group_send)(self.race_name, {
-                    'type': 'race_progress',
-                    'user_id': self.scope['user'].id,
-                    'word': players_word,
-                })
-                return
+            self.share_current_user_race_progress()
 
+            self.word_index += 1
 
-    def start_race(self, time_before_start):
-        is_race_started = cache.get(self.is_race_started_key)
+            if self.did_player_finish_the_race(quote):
+                self.record_finished_player_stats_to_db(quote)
+                self.mark_race_as_finished_in_db()
+                self.share_finished_player_stats()
+    
+        else:
+            self.send_error_wrong_message_format()
+        
+    def get_current_users_statistics(self):
+        return self.race_model.statistics.get(player=self.get_ws_user_info())
+        
 
-        if is_race_started:
+    def serialize_finished_player_stats(self):
+        stats = self.get_current_users_statistics()
+        print(f"time_racing: {stats.time_racing.seconds}")
+        return {
+            'player': self.get_ws_user_info().id,
+            'time_racing': str(stats.time_racing),
+            'place': stats.place,
+            'average_speed': stats.average_speed,
+        }
+
+    def share_finished_player_stats(self):
+        self.send_everyone(self.serialize_finished_player_stats())
+    
+    def delete_race_from_db(self):
+        self.race_model.delete()
+
+    def get_content_type_or_none(self, content):
+        try:
+            return content['type']
+        except KeyEror:
+            return None
+
+    def send_error_wrong_message_format(self):
+        self.send_json({
+                'type' : 'error',
+                'text' : 'Wrong message format',
+            })
+
+    def get_typed_word_or_none(self, content):
+        try:
+            return content['word']
+        except KeyError:
+            return None
+
+    def get_quote_of_the_game(self):
+        return self.race_model.quote.quote
+
+    def is_word_typed_in_correct_order(self, word, quote):
+        word_list = quote.split()
+
+        if word == word_list[self.word_index]:
+            return True
+        else:
+            return False
+
+    def is_typed_word_valid(self, content, quote):
+        word = self.get_typed_word_or_none(content)
+        
+        if word is None:
+            return False
+        
+        
+        if not self.is_word_typed_in_correct_order(word, quote):
+            return False
+
+        return True
+
+    def did_player_finish_the_race(self, quote):
+        if len(quote.split()) == self.word_index:
+            return True
+        else:
+            return False
+        
+    def mark_race_as_finished_in_db(self):
+        self.change_race_status('f')
+
+    def get_racing_time_in_seconds(self):
+        finish_date = timezone.now()
+        starting_date = self.race_model.start_date
+        print(f"get_racing_time_in_seconds: {(finish_date - starting_date).total_seconds()}")
+        return (finish_date - starting_date).total_seconds()
+
+    def get_race_statistics_list(self):
+        return self.race_model.statistics.all()
+
+    def get_current_users_place(self):
+        return len(self.get_race_statistics_list()) + 1
+
+    def calculate_average_speed(self, racing_time, quote):
+        quote_length = len(quote)
+        return quote_length / racing_time
+
+    def record_finished_player_stats_to_db(self, quote):
+        racing_time_in_seconds = self.get_racing_time_in_seconds()
+        
+        models.RaceStatistics.objects.create(
+            time_racing = datetime.timedelta(milliseconds=(racing_time_in_seconds*1000)),
+            finished = True,
+            player=self.get_ws_user_info(),
+            race=self.race_model,
+            place=self.get_current_users_place(),
+            average_speed=self.calculate_average_speed(racing_time_in_seconds, quote),
+        )        
+
+    def share_current_user_race_progress(self):
+        self.send_everyone({
+                'type': 'race_progress',
+                'player_id': self.get_ws_user_info().id,
+                'word_index': self.word_index,
+            })
+
+    def calculate_time_before_start_in_seconds(self, start_date):
+        return (start_date - timezone.now()).total_seconds()
+
+    def change_race_status(self, status):
+        self.race_model.status = status
+        self.race_model.save()
+
+    def change_race_status_to_on_timer(self):
+        self.race
+
+    def start_race_at(self, start_date):
+        if self.is_race_started():
             return
 
-        cache.set(self.is_race_started_key, True, settings.REDIS_CACHE_TIMEOUT)
-        players = cache.get(self.race_name)
+        self.change_race_status("t")
 
-        start_date = datetime.datetime.now() + datetime.timedelta(seconds = time_before_start)
-        cache.set(self.starting_time_key, start_date, settings.REDIS_CACHE_TIMEOUT)
+        time_before_start_in_seconds = self.calculate_time_before_start_in_seconds(start_date)
 
+        starting = threading.Thread(target=self.start_race, kwargs={'time_before_start' : time_before_start_in_seconds})
+        starting.start()
+        
 
-        async_to_sync(self.channel_layer.group_send)(self.race_name, {
-            'type': 'player_list',
-            'players': players,
-            'time' : start_date.isoformat(),
-        })
+    def wait(self, waiting_time):
+        time.sleep(waiting_time)
 
-        time.sleep(int(time_before_start))
-
-        quotes_to_choose = Quotes.objects.all()
-
-        random_quote = random.choice(list(quotes_to_choose))
-
-        categories = quotes_to_choose.get(id = random_quote.id).categories.all()
+    def get_quotes_categories(self, quote):
+        categories = Quotes.objects.get(id = quote.id).categories.all()
+        
         category_list = []
         for category in list(categories):
             category_list.append(category.category)
 
-        race = models.Race.objects.get(id = self.race_id)
-        race.status = 's'
-        race.quote = random_quote
-        race.save()
+        return category_list
 
-        cache.set(self.race_text_key, random_quote.quote, settings.REDIS_CACHE_TIMEOUT)
-        cache.set(self.race_start_time_key, time.perf_counter(), settings.REDIS_CACHE_TIMEOUT)
-        
-        async_to_sync(self.channel_layer.group_send)(self.race_name, {
+
+    def get_random_quote(self):
+        quotes_to_choose = Quotes.objects.all()
+
+        return random.choice(list(quotes_to_choose))
+
+
+
+    def record_race_start_info_to_db(self, quote, status):
+        self.race_model.status = status
+        self.race_model.quote = quote
+        self.race_model.save()
+
+    def share_race_start_info(self, quote, categories):
+        self.send_everyone({
             'type' : 'race_start',
-            'quote' : random_quote.quote,
-            'author' : random_quote.author,
-            'categories' : category_list,
+            'quote' : quote.quote,
+            'author' : quote.author,
+            'categories' : categories,
         })
 
-    
-    def start_server_lifetime_timer(self):
-        cache.set(self.server_lifetime_time_key, settings.REDIS_CACHE_TIMEOUT, settings.REDIS_CACHE_TIMEOUT)
 
-        for seconds in range(int(settings.REDIS_CACHE_TIMEOUT)):
-            time.sleep(1)
-            if not cache.has_key(self.server_lifetime_time_key):
-                return
+    def start_race(self, time_before_start):
+        self.wait(time_before_start)
+        
+        quote = self.get_random_quote()
+        categories = self.get_quotes_categories(quote)
+        
+        self.record_race_start_info_to_db(quote, "s")
 
-        async_to_sync(self.channel_layer.group_send)(self.race_name, {
-            'type' : 'server_close',
-        })
-
-    def clean_race_cache(self):
-        cache.delete(self.race_name)
-        cache.delete(self.is_race_started_key)
-        cache.delete(self.race_text_key)
-        cache.delete(self.race_start_time_key)
-        cache.delete(self.server_lifetime_time_key)
-        cache.delete(self.starting_time_key)
-
+        self.share_race_start_info(quote, categories)
+        
     def player_list(self, event):
         self.send_json(event)
     
@@ -297,3 +308,93 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
     def server_close(self, event):
         self.close()
 
+    def send_everyone(self, dict_to_send):
+        async_to_sync(self.channel_layer.group_send)(self.race_id, dict_to_send)
+        
+    def check_if_authenticated(self):
+        if not self.get_ws_user_info().is_authenticated:
+            return False
+        else:
+            return True
+
+    def get_corresponding_race_model(self):
+        race_id = self.scope['url_route']['kwargs']['race_id']
+
+        try: 
+            return models.Race.objects.get(Q(id = race_id), (Q(status="w") | Q(status="t")))
+        except:
+            return None
+
+    def get_ws_user_info(self):
+        return self.scope['user']
+
+    def add_current_user_to_participants_list(self):
+        self.get_participants().add(get_user_model().objects.get(id=self.get_ws_user_info().id))
+        self.race_model.save()
+        async_to_sync(self.channel_layer.group_add)(self.race_id, self.channel_name)
+        self.accept()
+
+    def remove_current_user_from_participants_list(self):
+        self.get_participants().remove(get_user_model().objects.get(id=self.get_ws_user_info().id))
+        self.race_model.save()
+        
+        async_to_sync(self.channel_layer.group_discard)(self.race_id, self.channel_name)
+
+    def get_participants(self):
+        return self.race_model.participants
+        
+    def check_if_already_participates(self):
+        if self.get_participants().filter(id=self.get_ws_user_info().id).exists():
+            return True
+        else:
+            return False
+
+    def calculate_date_after(self, seconds):
+        return timezone.now() + datetime.timedelta(seconds=seconds)
+
+    def is_race_started(self):
+        if self.race_model.status == "w":
+            return False
+        else:
+            return True
+
+    def is_race_available_to_join(self):
+        if self.race_model.status == "w" or self.race_model.status == "t":
+            return True
+        else:
+            return False
+
+    def is_race_finished(self):
+        if self.race_model.status == "f":
+            return True
+        else:
+            return False
+
+    def set_race_start_date(self, start_date):
+        self.race_model.start_date = start_date
+        self.race_model.save()
+
+    def get_race_start_date_or_none(self):
+        return self.race_model.start_date
+        
+    def serialize_participants(self):
+        participants_qs = self.get_participants().all()
+
+        participant_list = []
+
+        for participant_qs in participants_qs:
+            participant_list.append({'id':participant_qs.id, 'username':participant_qs.username,})
+
+        return participant_list
+
+    def share_race_organisational_info(self, start_date):
+
+        game_info = {
+            'type': 'player_list',
+            'players': self.serialize_participants(),
+        }
+
+        if start_date is not None:
+            game_info['time'] = start_date.isoformat()
+
+        self.send_everyone(game_info)

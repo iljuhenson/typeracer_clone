@@ -4,6 +4,7 @@ import datetime
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework.test import APITransactionTestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 from channels.testing import WebsocketCommunicator
@@ -14,7 +15,7 @@ from . import models
 from quotes_interface.models import Quotes, Categories
 from .routing import websocket_urlpatterns
 from config.channels_middleware import JwtAuthMiddlewareStack
-
+from time import perf_counter
 
 ADDITIONAL_USERS = [
     {
@@ -148,23 +149,24 @@ class RaceHandlerTestCase(APITransactionTestCase):
         self.assertEqual(response['type'], "player_list")
         self.assertEqual(len(response['players']), 1)
 
-        current_time = datetime.datetime.now()
+        current_time = timezone.now()
         await communicator.send_json_to({'type': 'race_action', 'action' : 'start_race'})
-
+        time_after_start = perf_counter()
         race_start_timer_response = await communicator.receive_json_from()
         
         self.assertEqual(race_start_timer_response['type'], 'player_list')
 
         race_starting_time = datetime.datetime.fromisoformat(race_start_timer_response['time'])
-        self.assertEqual((race_starting_time - current_time).seconds, 5)
+        self.assertEqual(round((race_starting_time - current_time).total_seconds()), 5)
         
         race_start_response = await communicator.receive_json_from(timeout=7)
         
         self.assertEqual(race_start_response['type'], 'race_start')
-
+        time_on_start = perf_counter()
         quote = race_start_response['quote']
         self.assertEqual(quote, self.testing_quote.quote)
 
+        word_idx = 0
         for word in quote.split():
             await asyncio.sleep(0.5)
             await communicator.send_json_to({'type' : 'race_progress', 'word' : word})
@@ -172,10 +174,11 @@ class RaceHandlerTestCase(APITransactionTestCase):
 
             self.assertEqual(word_sent_response, {
                 'type': 'race_progress',
-                'user_id': self.user.id,
-                'word': word,
+                'player_id': self.user.id,
+                'word_index': word_idx,
             })
 
+            word_idx += 1
             print(word)
 
         await communicator.disconnect()
@@ -185,6 +188,8 @@ class RaceHandlerTestCase(APITransactionTestCase):
         statistics = await sync_to_async(race_in_the_end.statistics.all)()
         stat_list = await sync_to_async(list)(statistics)
 
+        print(stat_list[0].time_racing)
+
         await sync_to_async(self.assertTrue)(statistics[0].time_racing > datetime.timedelta(seconds=1))
 
         race_status = race_in_the_end.status
@@ -193,10 +198,12 @@ class RaceHandlerTestCase(APITransactionTestCase):
         participants = await sync_to_async(race_in_the_end.participants.all)()
         participant_list = await sync_to_async(list)(participants)
 
-        self.assertEqual(len(participants), 1)
-        self.assertEqual(participants[0].id, self.user.id)
+        self.assertEqual(len(stat_list), 1)
+        ws_user_id = stat_list[0].player_id
+        self.assertEqual(ws_user_id, self.user.id)
 
-            
+
+    # needs some tweaks #
     async def test_multiplayer_game_playability(self):
         race = await sync_to_async(models.Race.objects.create)(creator=self.user)
         
@@ -207,6 +214,7 @@ class RaceHandlerTestCase(APITransactionTestCase):
 
         user_list = []
         
+
         for user in ADDITIONAL_USERS:
             print('inside additional user loop')
             temp = await database_sync_to_async(User.objects.create)(
@@ -225,6 +233,8 @@ class RaceHandlerTestCase(APITransactionTestCase):
             datetime_before_last_player_joins = datetime.datetime.now()
             connected_temp, _ = await communicator_temp.connect()
 
+
+            print(f"{user['username']} : {connected_temp}")
             self.assertTrue(connected_temp)
 
             user_list.append({
@@ -284,7 +294,6 @@ class RaceHandlerTestCase(APITransactionTestCase):
 
         await user_list[1]['communicator'].disconnect()
         await user_list[2]['communicator'].disconnect()
-
 
 
         

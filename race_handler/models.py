@@ -7,14 +7,13 @@ import shortuuid
 
 STATUS_CHOICE = (
     ("w", "waiting"),
+    ("t", "on timer"),
     ("s", "started"),
     ("f", "finished"),
 )
 
 def generate_short_uuid():
     return shortuuid.ShortUUID().random(length=10)
-
-# 
 
 class Race(models.Model):
     id = models.CharField(max_length=10, primary_key=True, default=generate_short_uuid, editable=False, unique=True)
@@ -26,18 +25,18 @@ class Race(models.Model):
     participants = models.ManyToManyField(User, related_name="races", blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    start_date = models.DateTimeField(null=True, blank=True)
 
 
-# place
-# average_speed
 class RaceStatistics(models.Model):
-    time_racing = models.DurationField(blank=True, null=True)
-
     player = models.ForeignKey(User, related_name="races_statistics", blank=True, on_delete=models.SET_NULL, null=True)
-    
     race = models.ForeignKey(Race, on_delete=models.SET_NULL, related_name="statistics", null=True)
-
+    
     finished = models.BooleanField(default=False)
+
+    time_racing = models.DurationField(blank=True, null=True)
+    place = models.IntegerField()
+    average_speed = models.FloatField()
     # progress = models.DecimalField(max_digits=4, decimal_places=3, validators=[
     #         MaxValueValidator(1),
     #         MinValueValidator(0)
