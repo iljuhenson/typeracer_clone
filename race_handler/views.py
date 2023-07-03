@@ -1,5 +1,6 @@
 
 from django.shortcuts import get_object_or_404
+from django.db.models import Count, Q 
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -16,7 +17,7 @@ def race_list(request):
     List all available races
     """
     if request.method == 'GET':
-        races = models.Race.objects.filter(status='w')
+        races = models.Race.objects.filter(Q(status='w') | Q(status='t')).annotate(amount_of_players=Count('participants'))
         serializer = serializers.RaceSerializer(races, many=True)
         return Response(serializer.data)
 
@@ -26,7 +27,7 @@ def race_list(request):
 def create_race(request):
     if request.method == 'POST':
         current_user = request.user
-        race = current_user.races.create(creator=current_user)
+        race = models.Race.objects.create(creator=current_user)
         serializer = serializers.RaceSerializer(race)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
