@@ -27,8 +27,21 @@ def race_list(request):
 def create_race(request):
     if request.method == 'POST':
         current_user = request.user
+
         race = models.Race.objects.create(creator=current_user)
-        serializer = serializers.RaceSerializer(race)
+
+        
+        race_dict = {
+            'id': race.id,
+            'creator': {
+                'username' : race.creator.username,
+                'id' : race.creator.id,
+            },
+            'status': race.status,
+            'amount_of_players': race.participants.count(),
+        }
+        
+        serializer = serializers.RaceSerializer(race_dict)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 

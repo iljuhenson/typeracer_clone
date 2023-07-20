@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'daphne',
     'django.contrib.staticfiles',
     'django.contrib.sites',
 
@@ -46,10 +47,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     
+    
     # Local
     'quotes_interface.apps.QuotesInterfaceConfig',
     'authentication.apps.AuthenticationConfig',
-    'race_handler.apps.RaceHandlerConfig'
+    'race_handler.apps.RaceHandlerConfig',
+    'statistics_page.apps.StatisticsPageConfig',
 ]
 
 MIDDLEWARE = [

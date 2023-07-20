@@ -9,6 +9,8 @@ from django.core.cache import cache
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db import transaction
+from django.db import connection
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
@@ -74,9 +76,11 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
         self.share_race_organisational_info(race_start_date)
     
-    
+    @transaction.atomic
     def receive_json(self, content, **kwargs):
-        
+        # print("Some client activity was received")
+        self.race_model.refresh_from_db()
+        # print(self.race_model.participants.all())
         content_type = self.get_content_type_or_none(content)
         
         if content_type is None:
@@ -100,10 +104,11 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
                 return
 
         if self.is_race_available_to_join():
+            print("race is not available to join")
             return
         
         if content_type == 'race_progress':
-
+            print("calculating race progress")
             quote = self.get_quote_of_the_game()
             
             if not self.is_typed_word_valid(content, quote):
@@ -130,7 +135,8 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         stats = self.get_current_users_statistics()
         print(f"time_racing: {stats.time_racing.seconds}")
         return {
-            'player': self.get_ws_user_info().id,
+            'type': 'race_player_finished',
+            'player_id': self.get_ws_user_info().id,
             'time_racing': str(stats.time_racing),
             'place': stats.place,
             'average_speed': stats.average_speed,
@@ -221,6 +227,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         )        
 
     def share_current_user_race_progress(self):
+        print(f"user got progress: {self.get_ws_user_info().id}")
         self.send_everyone({
                 'type': 'race_progress',
                 'player_id': self.get_ws_user_info().id,
@@ -293,6 +300,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
         self.share_race_start_info(quote, categories)
         
+        
     def player_list(self, event):
         self.send_json(event)
     
@@ -303,6 +311,9 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         self.send_json(event)
 
     def race_progress(self, event):
+        self.send_json(event)
+
+    def race_player_finished(self, event):
         self.send_json(event)
 
     def server_close(self, event):
@@ -329,10 +340,12 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         return self.scope['user']
 
     def add_current_user_to_participants_list(self):
+        print(f"adding user to participant list: {self.get_ws_user_info().id}")
         self.get_participants().add(get_user_model().objects.get(id=self.get_ws_user_info().id))
         self.race_model.save()
         async_to_sync(self.channel_layer.group_add)(self.race_id, self.channel_name)
         self.accept()
+        print(f"participants list for now: {self.get_participants().all()}")
 
     def remove_current_user_from_participants_list(self):
         self.get_participants().remove(get_user_model().objects.get(id=self.get_ws_user_info().id))
@@ -359,6 +372,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
             return True
 
     def is_race_available_to_join(self):
+        print(self.race_model.status)
         if self.race_model.status == "w" or self.race_model.status == "t":
             return True
         else:

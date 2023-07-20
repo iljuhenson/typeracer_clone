@@ -1,5 +1,8 @@
 # Typeracer Clone Api Documentation
 
+To run project urself you need to install docker then open the project folder and type `docker-compose up -d --build` in terminal, the project will be on `127.0.0.1:8000` 
+
+
 ## Overview
 
 This api allows you to make your own copy of Typeracer game. This game is powered by [Websocket protocol](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) and [JWT authentication](https://jwt.io/).

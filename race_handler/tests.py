@@ -135,7 +135,8 @@ class RaceHandlerTestCase(APITransactionTestCase):
         await communicator1.disconnect()
         await communicator2.disconnect()
 
-
+    # For some reason this test doesn't work, but everything it checks works in real time application
+    # (might be because I'm using separate thread in my consumer to countdown the time)
     async def test_solo_queue_race(self):
         race = await sync_to_async(models.Race.objects.create)(creator=self.user)
 
@@ -182,9 +183,11 @@ class RaceHandlerTestCase(APITransactionTestCase):
             print(word)
 
         await communicator.disconnect()
+        await sync_to_async(race.refresh_from_db)()
 
         race_in_the_end = await sync_to_async(models.Race.objects.get)(id=race.id)
 
+        await sync_to_async(race_in_the_end.refresh_from_db)()
         statistics = await sync_to_async(race_in_the_end.statistics.all)()
         stat_list = await sync_to_async(list)(statistics)
 
@@ -230,7 +233,7 @@ class RaceHandlerTestCase(APITransactionTestCase):
 
             communicator_temp = WebsocketCommunicator(self.url_patterns, f"/ws/race/{race.id}/?token={access_token}")
 
-            datetime_before_last_player_joins = datetime.datetime.now()
+            datetime_before_last_player_joins = timezone.now()
             connected_temp, _ = await communicator_temp.connect()
 
 
@@ -271,8 +274,10 @@ class RaceHandlerTestCase(APITransactionTestCase):
             await asyncio.sleep(0.5)
             await user_list[1]['communicator'].send_json_to({'type' : 'race_progress', 'word' : word})
             word_sent_response1 = await get_last_message(user_list[1]['communicator'])
-            word_sent_response2 = await get_last_message(user_list[2]['communicator'])
             await user_list[2]['communicator'].send_json_to({'type' : 'race_progress', 'word' : word})
+            word_sent_response2 = await get_last_message(user_list[2]['communicator'])
+            print(word_sent_response1)
+            print(word_sent_response2)
             self.assertEqual(word_sent_response1, word_sent_response2)
             
         await communicator.disconnect()
@@ -291,6 +296,7 @@ class RaceHandlerTestCase(APITransactionTestCase):
         participant_list = await sync_to_async(list)(participants)
         
         self.assertEqual(len(participants), 2)
+        self.assertEqual(len(stat_list), 2)
 
         await user_list[1]['communicator'].disconnect()
         await user_list[2]['communicator'].disconnect()
