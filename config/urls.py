@@ -26,6 +26,6 @@ urlpatterns = [
     path('api/', include('authentication.urls')),
     path('api/', include('race_handler.urls')),
     path('api/', include('statistics_page.urls')),
-    re_path(r'^.*/$', TemplateView.as_view(template_name="index.html")),
-    re_path(r'^', TemplateView.as_view(template_name="index.html")),
+    # re_path(r'^.*/$', TemplateView.as_view(template_name="index.html")),
+    # re_path(r'^', TemplateView.as_view(template_name="index.html")),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

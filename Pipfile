@@ -14,6 +14,8 @@ channels = {extras = ["daphne"], version = "*"}
 shortuuid = "*"
 channels-redis = "*"
 redis = "*"
+gunicorn = "*"
+uvicorn = {version = "*", extras = ["standard"]}
 
 [dev-packages]
 

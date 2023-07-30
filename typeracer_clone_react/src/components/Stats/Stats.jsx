@@ -14,7 +14,7 @@ function Stats() {
   
   useEffect(() => {
     if(!isLoggedIn) {
-        location('/singin')
+        location('/signin')
         return
     }
 
@@ -81,10 +81,22 @@ function Stats() {
             </>
           }
       >
-        {userInfo.races_statistics.map((raceStats, idx) => <ListItemWithHover setQuoteIndex={setQuoteIndex} raceStats={raceStats} key={idx} idx={idx} />)}
-     
+      {
+        userInfo.races_statistics.length != 0
+        ?
+        userInfo.races_statistics.map((raceStats, idx) => <ListItemWithHover setQuoteIndex={setQuoteIndex} raceStats={raceStats} key={idx} idx={idx} />)
+        :
+        ""
+      }
+      
       </List>
-      <Paper variant="outlined" sx={{zIndex: 10, height: 'auto', width: 500, p: 2, ml: '4%', position: 'relative', top: '2rem'}}><Typography><b>Quote:</b> {userInfo.races_statistics[quoteIndex].race.quote.quote}</Typography></Paper>
+      {
+        userInfo.races_statistics.length != 0
+        ?
+        <Paper variant="outlined" sx={{zIndex: 10, height: 'auto', width: 500, p: 2, ml: '4%', position: 'relative', top: '2rem'}}><Typography><b>Quote:</b> {userInfo.races_statistics[quoteIndex].race.quote.quote}</Typography></Paper>
+        :
+        ""
+      }
       </Box>
       </>}
     </>

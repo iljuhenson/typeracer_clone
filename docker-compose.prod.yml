@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python populate_db.py &&
+             python manage.py collectstatic --noinput &&
+             ( python manage.py createsuperuser --noinput || true) &&
+             uvicorn config.asgi:application --host 0.0.0.0 --port 8001"    
+    volumes:
+      - .:/app
+    expose:
+      - "8001"
+    env_file:
+      - ./docker.prod.env
+    depends_on:
+      - db
+      - redis
+  # client:
+  #   build: ./typeracer_clone_react
+  #   volumes:
+  #     - ./typeracer_clone_react:/app
+  #   depends_on:
+  #     - web
+  db:
+    image: 'postgres:15'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+  nginx:
+    build: 
+      context: ./
+      dockerfile: ./nginx/Dockerfile
+    volumes:
+      - ./staticfiles:/staticfiles
+      - ./typeracer_clone_react:/app
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
