@@ -8,6 +8,11 @@ docker-compose -f docker-compose.prod.yml up -d --build
 The project will be on `127.0.0.1:80`<br/> 
 *Note: this repo contains all the react written frontend inside the typeracer_clone_react folder.*
 
+Video review of the project:
+
+https://github.com/iljuhenson/typeracer_clone/assets/61389906/1b4eb3c6-7ce1-45e3-96e1-a5978a64a1bf
+
+
 ## Overview
 
 This api allows you to make your own copy of Typeracer game. This game is powered by [Websocket protocol](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) and [JWT authentication](https://jwt.io/).
