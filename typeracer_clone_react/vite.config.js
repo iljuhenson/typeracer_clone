@@ -15,17 +15,17 @@ export default defineConfig({
       // },
 
       '/api': {
-        target: "http://localhost:80/",
+        target: "http://localhost:8000/",
         changeOrigin: true,
         secure: false,
       },
 
       // Proxying websockets or socket.io
-      '/ws': {
-        target: 'ws://localhost:80',
-        ws: true,
-        changeOrigin: true,
-      }
+      // '/ws': {
+      //   target: 'ws://localhost:8000/',
+      //   ws: true,
+      //   changeOrigin: true,
+      // }
     }
   }
 })
