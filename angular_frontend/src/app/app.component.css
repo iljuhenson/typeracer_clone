@@ -1,0 +1,23 @@
+.app-background {
+  background-color: var(--app-background-color);
+  width: 100vw;
+  min-height: 100vh;
+}
+
+.nav-button-container {
+  display: flex;
+  gap: 42px;
+}
+
+.nav-button {
+  background-color: var(--primary-card-background-color);
+  border-radius: 999px;
+  padding: 16px;
+}
+
+.nav-container {
+  padding: 30px 40px;
+  position: sticky;
+  display: flex;
+  justify-content: space-between;
+}
