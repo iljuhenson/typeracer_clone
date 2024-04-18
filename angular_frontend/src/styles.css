@@ -25,6 +25,7 @@ time, mark, audio, video {
   font-weight: 400;
   font-style: normal;
   vertical-align: baseline;
+  box-sizing: border-box;
 }
 /* HTML5 display-role reset for older browsers */
 article, aside, details, figcaption, figure,
@@ -60,14 +61,14 @@ table {
 
   --primary-text-color: #A2B2BF;
   --correct-text-color: #8AC379;
-  --mistake-text-color: #D45547;
+  --wrong-text-color: #D45547;
   --placeholder-text-color: #7E8083;
   --neon-text-color: #FFFFFF;
 
   --neon-shadow-color: #5157CD;
 
   /* SIZES */
-  --logo-text-size: 48px;
+  --logo-text-size: 54px;
   --primary-text-size: 24px;
   --small-text-size: 16px;
 

@@ -1,1 +1,21 @@
-<p>game-page works!</p>
+<div class="game-page-container">
+  <div class="game-player-ranks-container">
+
+  </div>
+
+  <div class="neon-surface game-text-container">
+    <span class="correctly-typed">
+      {{correctlyTypedText}}
+    </span>
+    <span class="wrongly-typed">
+      {{wronglyTypedText}}
+    </span>
+    <span class="not-typed">
+      {{notTypedText}}
+    </span>
+  </div>
+
+  <div class="neon-surface game-input-container">
+    <input [(ngModel)]="currentWordText" (keydown)="onCharacterTyped()">
+  </div>
+</div>
