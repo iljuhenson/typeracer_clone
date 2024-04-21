@@ -13,10 +13,10 @@ jobs:
     - name: pull and deploy
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.HOSTNAME }}
-        username: ${{ secrets.USERNAME }}
-        password: ${{ secrets.PASSWORD }}
-        port: ${{ secrets.PORT }}
+        host: ${{ secrets.SERVER_HOSTNAME }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: ${{ secrets.SERVER_PORT }}
         command_timeout: 30m
         script: | 
           cd ~/deploy/neotyper/app
