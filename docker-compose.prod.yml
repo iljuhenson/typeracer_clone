@@ -17,7 +17,6 @@ services:
     env_file:
       - ../secrets/docker.prod.env
     depends_on:
-      - db
       - redis
     networks:
       - extnetwork
