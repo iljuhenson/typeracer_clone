@@ -2,7 +2,10 @@ FROM node:18.17 as builder
 
 WORKDIR /app
 
-COPY typeracer_clone_react/ .
+#COPY typeracer_clone_react/ .
+COPY typeracer_clone_react/src/ /app/src
+COPY typeracer_clone_react/package.json typeracer_clone_react/package-lock.json typeracer_clone_react/vite.config.js typeracer_clone_react/.eslintrc.cjs typeracer_clone_react/index.html /app/
+
 RUN npm ci 
 RUN npm run build
 
