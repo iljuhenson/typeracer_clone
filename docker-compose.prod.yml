@@ -15,7 +15,7 @@ services:
     expose:
       - "8001"
     env_file:
-      - ../secrets/docker.prod.env
+      - ../secrets/.env
     depends_on:
       - redis
     networks:
