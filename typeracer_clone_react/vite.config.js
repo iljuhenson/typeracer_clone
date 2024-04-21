@@ -22,7 +22,7 @@ export default defineConfig({
 
       // Proxying websockets or socket.io
       '/ws': {
-        target: 'ws://localhost:80',
+        target: 'ws://localhost:80/',
         ws: true,
         changeOrigin: true,
       }

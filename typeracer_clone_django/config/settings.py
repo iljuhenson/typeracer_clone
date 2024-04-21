@@ -28,6 +28,8 @@ DEBUG = int(os.environ.get('DJANGO_DEBUG', default=0))
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', default="").split()
 CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*']
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = True
 
 # Application definition
 

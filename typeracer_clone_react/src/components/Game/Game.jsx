@@ -145,7 +145,7 @@ function Game() {
   useEffect(() => {
     (async () => {
       let token = await getAccessToken()
-      setGameLink(`ws://localhost:80/ws/race/${game_id}/?token=${token}`)
+      setGameLink(`/ws/race/${game_id}/?token=${token}`)
       let decodedToken = jwt_decode(token)
       setThisUserId(decodedToken['user_id'])
     }
