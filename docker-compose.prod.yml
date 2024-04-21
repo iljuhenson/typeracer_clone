@@ -21,7 +21,7 @@ services:
       - redis
     networks:
       - extnetwork
-      -
+
   redis:
     image: redis:6
     ports:
