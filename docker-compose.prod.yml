@@ -20,7 +20,6 @@ services:
       - db:db
     depends_on:
       - redis
-      - db
     networks:
       - extnetwork
 
