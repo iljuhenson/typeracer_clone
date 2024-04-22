@@ -16,7 +16,7 @@ services:
       - "8001"
     env_file:
       - ../secrets/.env
-    links:
+    external_links:
       - db:db
     depends_on:
       - redis
