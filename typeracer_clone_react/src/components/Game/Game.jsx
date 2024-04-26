@@ -153,7 +153,7 @@ function Game() {
   }, [game_id]);
 
   const { sendJsonMessage, lastMessage, readyState, getWebSocket } = useWebSocket(
-  gameLink,
+  "wss://" + window.location.hostname + gameLink,
   {
     onMessage: (event) => { processMessage(event) },
     onClose: (event) => { setServerExists(false), console.log("connection closed") }
