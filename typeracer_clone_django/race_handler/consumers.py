@@ -63,7 +63,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
 
     def disconnect(self, close_code):
-        self.send_json({"message: disconnecting"})
+        self.send_json({"message": "disconnecting"})
         if not self.requires_cleanup:
             return
 
