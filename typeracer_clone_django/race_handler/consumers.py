@@ -199,8 +199,8 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
     def get_racing_time_in_seconds(self):
         finish_date = timezone.now()
         starting_date = self.race_model.start_date
-        print(f"get_racing_time_in_seconds: {
-              (finish_date - starting_date).total_seconds()}")
+        # print(f"get_racing_time_in_seconds: {
+        #       (finish_date - starting_date).total_seconds()}")
         return (finish_date - starting_date).total_seconds()
 
     def get_race_statistics_list(self):
@@ -398,6 +398,9 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         participant_list = []
 
         for participant_qs in participants_qs:
+            if not hasattr(participant_qs, "participant_settings"):
+                models.ParticipantSettings(user=participant_qs).save()
+
             participant_list.append(
                 {'id': participant_qs.id, 'username': participant_qs.username, 'vehicle_look': participant_qs.participant_settings.vehicle_look})
 

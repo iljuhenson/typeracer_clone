@@ -9,21 +9,21 @@
 # from rest_framework_simplejwt.tokens import UntypedToken
 # from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 # from jwt import decode as jwt_decode
- 
+
 # class TokenAuthMiddleware:
 #     """
 #     Custom token auth middleware
 #     """
- 
+
 #     def __init__(self, inner):
 #         # Store the ASGI application we were passed
 #         self.inner = inner
- 
+
 #     async def __call__(self, scope):
- 
+
 #         # Close old database connections to prevent usage of timed out connections
 #         close_old_connections()
- 
+
 #         # Get the token
 #         try:
 #             token = parse_qs(scope["query_string"].decode("utf8"))["token"][0]
@@ -48,10 +48,10 @@
 #             #     "jti": "5c15e80d65b04c20ad34d77b6703251b",
 #             #     "user_id": 6
 #             # }
- 
+
 #             # Get the user using ID
 #             user = await sync_to_async(get_user_model().objects.get)(id=decoded_data["user_id"])
- 
+
 #         # Return the inner application directly and let it run everything else
 #         return self.inner(dict(scope, user=user))
 
@@ -76,10 +76,9 @@ def get_user(validated_token):
     try:
         user = get_user_model().objects.get(id=validated_token["user_id"])
         return user
-   
+
     except User.DoesNotExist:
         return AnonymousUser()
-
 
 
 class JwtAuthMiddleware(BaseMiddleware):
@@ -91,7 +90,13 @@ class JwtAuthMiddleware(BaseMiddleware):
         close_old_connections()
 
         # Get the token
-        token = parse_qs(scope["query_string"].decode("utf8"))["token"][0]
+        print(parse_qs(scope["query_string"].decode("utf8")))
+        token = None
+        try:
+            token = parse_qs(scope["query_string"].decode("utf8"))["token"][0]
+        except KeyError:
+            scope["user"] = await sync_to_async(AnonymousUser)()
+            return await super().__call__(scope, receive, send)
 
         # Try to authenticate the user
         try:
@@ -101,7 +106,8 @@ class JwtAuthMiddleware(BaseMiddleware):
             scope["user"] = await sync_to_async(AnonymousUser)()
         else:
             #  Then token is valid, decode it
-            decoded_data = jwt_decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            decoded_data = jwt_decode(
+                token, settings.SECRET_KEY, algorithms=["HS256"])
 
             # Will return a dictionary like -
             # {
