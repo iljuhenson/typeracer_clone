@@ -2,6 +2,7 @@ import threading
 import random
 import time
 import datetime
+import json
 
 
 from django.db.models import Q
@@ -13,13 +14,13 @@ from django.db import transaction
 from django.db import connection
 
 from asgiref.sync import async_to_sync
-from channels.generic.websocket import JsonWebsocketConsumer
+from channels.generic.websocket import JsonWebsocketConsumer, WebsocketConsumer
 
 from . import models
 from quotes_interface.models import Quotes
 
 
-class RaceHandlerConsumer(JsonWebsocketConsumer):
+class RaceHandlerConsumer(WebsocketConsumer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(args, kwargs)
@@ -74,18 +75,20 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         self.share_race_organisational_info(race_start_date)
 
     @transaction.atomic
-    def receive_json(self, content, **kwargs):
+    def receive(self, text_data, **kwargs):
         # print("Some client activity was received")
         self.race_model.refresh_from_db()
         # print(self.race_model.participants.all())
-        content_type = self.get_content_type_or_none(content)
+        print(text_data)
+        text_data = json.loads(text_data)
+        content_type = self.get_content_type_or_none(text_data)
 
         if content_type is None:
             self.send_error_wrong_message_format()
             return
 
         if content_type == 'race_action':
-            if content['action'] == 'start_race':
+            if text_data['action'] == 'start_race':
 
                 if not self.is_race_started():
                     race_start_date = self.calculate_date_after(5.0)
@@ -96,8 +99,10 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
                     return
 
-            if content['action'] == 'change_vehicle_look' and not self.is_race_started():
-                change_vehicle_look(content['vehicle_look'])
+            if text_data['action'] == 'change_vehicle_look' and not self.is_race_started():
+                print('This is a text data for vehicle look',
+                      text_data['vehicle_look'])
+                self.change_vehicle_look(text_data['vehicle_look'])
 
             else:
                 self.send_error_wrong_message_format()
@@ -111,7 +116,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
             print("calculating race progress")
             quote = self.get_quote_of_the_game()
 
-            if not self.is_typed_word_valid(content, quote):
+            if not self.is_typed_word_valid(text_data, quote):
                 self.send_error_wrong_message_format()
                 return
 
@@ -154,10 +159,10 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
             return None
 
     def send_error_wrong_message_format(self):
-        self.send_json({
+        self.send(text_data=json.dumps({
             'type': 'error',
             'text': 'Wrong message format',
-        })
+        }))
 
     def get_typed_word_or_none(self, content):
         try:
@@ -171,10 +176,11 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
     def is_word_typed_in_correct_order(self, word, quote):
         word_list = quote.split()
 
-        if word == word_list[self.word_index]:
-            return True
-        else:
-            return False
+        if self.word_index < len(word_list):
+            if word == word_list[self.word_index]:
+                return True
+            else:
+                return False
 
     def is_typed_word_valid(self, content, quote):
         word = self.get_typed_word_or_none(content)
@@ -255,7 +261,7 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
             start_date)
 
         starting = threading.Thread(target=self.start_race, kwargs={
-                                    'time_before_start': time_before_start_in_seconds})
+            'time_before_start': time_before_start_in_seconds})
         starting.start()
 
     def wait(self, waiting_time):
@@ -299,19 +305,22 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
         self.share_race_start_info(quote, categories)
 
     def player_list(self, event):
-        self.send_json(event)
+        self.send(text_data=json.dumps(event))
 
     def race_starting_timer(self, event):
-        self.send_json(event)
+        self.send(text_data=json.dumps(event))
 
     def race_start(self, event):
-        self.send_json(event)
+        self.send(text_data=json.dumps(event))
 
     def race_progress(self, event):
-        self.send_json(event)
+        self.send(text_data=json.dumps(event))
 
     def race_player_finished(self, event):
-        self.send_json(event)
+        self.send(text_data=json.dumps(event))
+
+    def update_vehicle_look(self, event):
+        self.send(text_data=json.dumps(event))
 
     def server_close(self, event):
         self.close()
@@ -418,9 +427,11 @@ class RaceHandlerConsumer(JsonWebsocketConsumer):
 
         self.send_everyone(game_info)
 
-    def update_vehicle_look(self, vehicle_look):
+    def change_vehicle_look(self, vehicle_look):
         user = get_user_model().objects.get(id=self.get_ws_user_info().id)
         user.participant_settings.vehicle_look = vehicle_look
+        print('this is a new vehicle look', vehicle_look)
+        user.participant_settings.save()
         self.send_everyone({
             'type': 'update_vehicle_look',
             'player_id': self.get_ws_user_info().id,

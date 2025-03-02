@@ -119,6 +119,7 @@ class JwtAuthMiddleware(BaseMiddleware):
 
             # Get the user using ID
             scope["user"] = await get_user(validated_token=decoded_data)
+        print(f"value of scope {scope}")
         return await super().__call__(scope, receive, send)
 
 
