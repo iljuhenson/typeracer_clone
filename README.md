@@ -3,6 +3,7 @@
 ```bash
 # Clone the repo
 git clone https://github.com/iljuhenson/typeracer_clone.git
+cd typeracer_clone
 
 # Set up db and backend
 docker-compose up -d --build # this is for django server and database
