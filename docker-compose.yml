@@ -2,8 +2,8 @@ version: '3.8'
 
 services:
   web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    build: ./typeracer_clone_django
+    command: python typeracer_clone_django/manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
     ports:
@@ -18,6 +18,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - 5432:5432
   redis:
     image: redis:6
     ports:

@@ -1,3 +1,21 @@
+# Running this application localy:
+
+```bash
+# Clone the repo
+git clone https://github.com/iljuhenson/typeracer_clone.git
+cd typeracer_clone
+
+# Set up db and backend
+docker-compose up -d --build # this is for django server and database
+docker compose exec web bash -c "cd typeracer_clone_django; python manage.py shell < populate_db.py" # populates db with quotes
+
+# Set up frontend
+npm i --prefix typeracer_clone_react # installing node dependencies
+npm run dev --prefix typeracer_clone_react
+```
+
+Go to `localhost:5173/`
+
 # Typeracer Clone Api Documentation
 
 To run project urself you need to install docker then open the project folder and type
